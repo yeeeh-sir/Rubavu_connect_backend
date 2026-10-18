@@ -3,13 +3,33 @@ const { pool } = require('../../config/database');
 async function runMigration() {
     const connection = await pool.getConnection();
     try {
+        const commentMediaColumns = [
+            ['media_url', 'VARCHAR(1000) NULL'],
+            ['media_type', "ENUM('image', 'voice') NULL"],
+            ['audio_duration', 'DECIMAL(8,2) NULL'],
+        ];
+        const [existingColumns] = await connection.execute(
+            `SELECT COLUMN_NAME
+             FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = 'comments'
+               AND COLUMN_NAME IN (?, ?, ?)`,
+            commentMediaColumns.map(([column]) => column)
+        );
+        const existingColumnNames = new Set(existingColumns.map(({ COLUMN_NAME }) => COLUMN_NAME));
+
         await connection.query(`
       ALTER TABLE comments
-        MODIFY COLUMN comment_text TEXT NULL,
-        ADD COLUMN IF NOT EXISTS media_url VARCHAR(1000) NULL,
-        ADD COLUMN IF NOT EXISTS media_type ENUM('image', 'voice') NULL,
-        ADD COLUMN IF NOT EXISTS audio_duration DECIMAL(8,2) NULL
+        MODIFY COLUMN comment_text TEXT NULL
     `);
+
+        for (const [column, definition] of commentMediaColumns) {
+            if (!existingColumnNames.has(column)) {
+                await connection.query(
+                    `ALTER TABLE comments ADD COLUMN \`${column}\` ${definition}`
+                );
+            }
+        }
 
         await connection.query(`
       CREATE TABLE IF NOT EXISTS live_sessions (
@@ -53,6 +73,9 @@ async function runMigration() {
     `);
 
         console.log('Live and comment media migration complete');
+    } catch (error) {
+        console.error('Live and comment media migration failed:', error.message);
+        throw error;
     } finally {
         connection.release();
     }
