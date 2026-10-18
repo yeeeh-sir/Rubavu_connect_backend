@@ -8,18 +8,7 @@ const cookieParser = require('cookie-parser');
 const { checkConnection } = require('./config/database');
 const { startCleanupService } = require('./services/cleanupService');
 const errorHandler = require('./middleware/errorHandler');
-const { runMigration: runUsersMigration } = require('./database/migrations/000_create_users');
-const { runMigration } = require('./database/migrations/001_create_notifications');
-const { runMigration: runConnectionsMigration } = require('./database/migrations/002_create_connections');
-const { runMigration: runSafetyMigration } = require('./database/migrations/003_create_safety');
-const { runMigration: runLiveMigration } = require('./database/migrations/004_create_live_and_comment_media');
-const { runMigration: runPostAudienceMigration } = require('./database/migrations/005_add_post_audience_collaborators');
-const { runMigration: runPlatformMigration } = require('./database/migrations/006_create_platform_features');
-const { runMigration: runPresenceMigration } = require('./database/migrations/007_add_presence');
-const { runMigration: runPhoneNumberMigration } = require('./database/migrations/008_add_phone_number');
-const { runMigration: runRbacMigration } = require('./database/migrations/009_add_rbac_and_audit');
-const { runMigration: runModerationMigration } = require('./database/migrations/010_moderation_fields');
-const { runMigration: runMessageReportsMigration } = require('./database/migrations/011_message_reports');
+const { runMigrations } = require('./database/runMigrations');
 const { maintenanceGuard } = require('./middleware/maintenance');
 const { attachSocketServer } = require('./services/socketService');
 
@@ -100,18 +89,7 @@ async function startServer() {
       process.exit(1);
     }
 
-    await runUsersMigration();
-    await runMigration();
-    await runConnectionsMigration();
-    await runSafetyMigration();
-    await runLiveMigration();
-    await runPostAudienceMigration();
-    await runPlatformMigration();
-    await runPresenceMigration();
-    await runPhoneNumberMigration();
-    await runRbacMigration();
-    await runModerationMigration();
-    await runMessageReportsMigration();
+    await runMigrations();
     startCleanupService();
 
     const { server } = attachSocketServer(app);
