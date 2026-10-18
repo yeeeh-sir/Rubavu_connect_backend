@@ -38,10 +38,22 @@ describe('comments table migration', () => {
     ]);
   });
 
-  test('creates the application comments schema only after validating its existing parent tables', async () => {
+  test('matches each parent primary-key type instead of assuming unsigned bigints', async () => {
     mockExecute.mockResolvedValue([[
-      { TABLE_NAME: 'posts', ENGINE: 'InnoDB', COLUMN_TYPE: 'bigint(20) unsigned', COLUMN_KEY: 'PRI' },
-      { TABLE_NAME: 'users', ENGINE: 'InnoDB', COLUMN_TYPE: 'bigint(20) unsigned', COLUMN_KEY: 'PRI' },
+      {
+        TABLE_NAME: 'posts',
+        ENGINE: 'InnoDB',
+        COLUMN_TYPE: 'int(11)',
+        PRIMARY_KEY_COLUMN_COUNT: 1,
+        ID_IS_PRIMARY_KEY: 1,
+      },
+      {
+        TABLE_NAME: 'users',
+        ENGINE: 'InnoDB',
+        COLUMN_TYPE: 'bigint(20) unsigned',
+        PRIMARY_KEY_COLUMN_COUNT: 1,
+        ID_IS_PRIMARY_KEY: 1,
+      },
     ]]);
 
     await runMigration();
@@ -49,8 +61,8 @@ describe('comments table migration', () => {
     expect(mockExecute).toHaveBeenCalledWith(expect.stringContaining('information_schema.TABLES'), ['posts', 'users']);
     expect(mockQuery).toHaveBeenCalledWith(expect.stringContaining('CREATE TABLE IF NOT EXISTS comments'));
     const createTable = mockQuery.mock.calls[0][0];
-    expect(createTable).toContain('post_id BIGINT UNSIGNED NOT NULL');
-    expect(createTable).toContain('user_id BIGINT UNSIGNED NOT NULL');
+    expect(createTable).toContain('post_id INT(11) NOT NULL');
+    expect(createTable).toContain('user_id BIGINT(20) UNSIGNED NOT NULL');
     expect(createTable).toContain('REFERENCES posts(id)');
     expect(createTable).toContain('REFERENCES users(id)');
     expect(createTable).toContain('comment_text TEXT NULL');
@@ -61,8 +73,20 @@ describe('comments table migration', () => {
 
   test('uses idempotent DDL when run repeatedly', async () => {
     mockExecute.mockResolvedValue([[
-      { TABLE_NAME: 'posts', ENGINE: 'InnoDB', COLUMN_TYPE: 'bigint(20) unsigned', COLUMN_KEY: 'PRI' },
-      { TABLE_NAME: 'users', ENGINE: 'InnoDB', COLUMN_TYPE: 'bigint(20) unsigned', COLUMN_KEY: 'PRI' },
+      {
+        TABLE_NAME: 'posts',
+        ENGINE: 'InnoDB',
+        COLUMN_TYPE: 'bigint(20) unsigned',
+        PRIMARY_KEY_COLUMN_COUNT: 1,
+        ID_IS_PRIMARY_KEY: 1,
+      },
+      {
+        TABLE_NAME: 'users',
+        ENGINE: 'InnoDB',
+        COLUMN_TYPE: 'bigint(20) unsigned',
+        PRIMARY_KEY_COLUMN_COUNT: 1,
+        ID_IS_PRIMARY_KEY: 1,
+      },
     ]]);
 
     await runMigration();
@@ -74,12 +98,16 @@ describe('comments table migration', () => {
 
   test('fails clearly without creating a table if a required parent table is missing', async () => {
     mockExecute.mockResolvedValue([[
-      { TABLE_NAME: 'users', ENGINE: 'InnoDB', COLUMN_TYPE: 'bigint(20) unsigned', COLUMN_KEY: 'PRI' },
+      {
+        TABLE_NAME: 'users',
+        ENGINE: 'InnoDB',
+        COLUMN_TYPE: 'bigint(20) unsigned',
+        PRIMARY_KEY_COLUMN_COUNT: 1,
+        ID_IS_PRIMARY_KEY: 1,
+      },
     ]]);
 
-    await expect(runMigration()).rejects.toThrow(
-      'Cannot create comments table: posts.id must be an InnoDB BIGINT UNSIGNED primary key'
-    );
+    await expect(runMigration()).rejects.toThrow('Cannot create comments table: posts.id');
     expect(mockQuery).not.toHaveBeenCalled();
     expect(mockRelease).toHaveBeenCalledTimes(1);
   });

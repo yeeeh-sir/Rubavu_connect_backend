@@ -1,10 +1,12 @@
 const request = require('supertest');
 const app = require('../server');
+const { isRegistrationEnabled } = require('../services/settingsService');
 
 describe('Rubavu Connect API Tests', () => {
   let authToken = '';
   let userId = '';
   let postId = '';
+  let registrationEnabled;
   const testUser = {
     full_name: 'Test User',
     username: 'testuser' + Date.now(),
@@ -12,6 +14,10 @@ describe('Rubavu Connect API Tests', () => {
     phone_number: '+250 7' + Date.now().toString().slice(-8),
     password: 'password123',
   };
+
+  beforeAll(async () => {
+    registrationEnabled = await isRegistrationEnabled();
+  });
 
   describe('Health Check', () => {
     test('GET /api/health should return 200 with success message', async () => {
@@ -27,6 +33,11 @@ describe('Rubavu Connect API Tests', () => {
       const res = await request(app)
         .post('/api/auth/register')
         .send(testUser);
+      if (!registrationEnabled) {
+        expect(res.statusCode).toBe(403);
+        expect(res.body.message).toBe('Registration is currently disabled');
+        return;
+      }
       expect(res.statusCode).toBe(201);
       expect(res.body.success).toBe(true);
       expect(res.body.data.user).toHaveProperty('id');
@@ -39,6 +50,11 @@ describe('Rubavu Connect API Tests', () => {
       const res = await request(app)
         .post('/api/auth/register')
         .send(testUser);
+      if (!registrationEnabled) {
+        expect(res.statusCode).toBe(403);
+        expect(res.body.message).toBe('Registration is currently disabled');
+        return;
+      }
       expect(res.statusCode).toBe(409);
       expect(res.body.success).toBe(false);
     });
@@ -60,6 +76,10 @@ describe('Rubavu Connect API Tests', () => {
       const res = await request(app)
         .post('/api/auth/login')
         .send({ email: testUser.email, password: testUser.password });
+      if (!registrationEnabled) {
+        expect(res.statusCode).toBe(401);
+        return;
+      }
       expect(res.statusCode).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.token).toBeDefined();
@@ -69,6 +89,10 @@ describe('Rubavu Connect API Tests', () => {
       const res = await request(app)
         .post('/api/auth/login')
         .send({ identifier: testUser.username, password: testUser.password });
+      if (!registrationEnabled) {
+        expect(res.statusCode).toBe(401);
+        return;
+      }
       expect(res.statusCode).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.user.username).toBe(testUser.username);
@@ -78,6 +102,10 @@ describe('Rubavu Connect API Tests', () => {
       const res = await request(app)
         .post('/api/auth/login')
         .send({ identifier: testUser.phone_number, password: testUser.password });
+      if (!registrationEnabled) {
+        expect(res.statusCode).toBe(401);
+        return;
+      }
       expect(res.statusCode).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.user.phone_number).toBe(testUser.phone_number.replace(/\s/g, ''));
@@ -100,6 +128,10 @@ describe('Rubavu Connect API Tests', () => {
       const res = await request(app)
         .get('/api/auth/me')
         .set('Authorization', `Bearer ${authToken}`);
+      if (!registrationEnabled) {
+        expect(res.statusCode).toBe(401);
+        return;
+      }
       expect(res.statusCode).toBe(200);
       expect(res.body.data.user).toHaveProperty('email');
     });
@@ -108,6 +140,12 @@ describe('Rubavu Connect API Tests', () => {
       const res = await request(app)
         .get('/api/auth/me')
         .set('Authorization', `Bearer ${authToken}`);
+      if (!registrationEnabled) {
+        expect(res.statusCode).toBe(401);
+        expect(res.body.data).toBeUndefined();
+        return;
+      }
+      expect(res.statusCode).toBe(200);
       expect(res.body.data.user).not.toHaveProperty('password_hash');
       expect(res.body.data.user).not.toHaveProperty('password');
     });
@@ -121,6 +159,11 @@ describe('Rubavu Connect API Tests', () => {
         password: 'initial-password123',
       };
       const registration = await request(app).post('/api/auth/register').send(account);
+      if (!registrationEnabled) {
+        expect(registration.statusCode).toBe(403);
+        expect(registration.body.message).toBe('Registration is currently disabled');
+        return;
+      }
       expect(registration.statusCode).toBe(201);
       const token = registration.body.data.token;
       const authorization = `Bearer ${token}`;
@@ -184,6 +227,10 @@ describe('Rubavu Connect API Tests', () => {
         .post('/api/posts')
         .set('Authorization', `Bearer ${authToken}`)
         .send({ caption: 'Test post' });
+      if (!registrationEnabled) {
+        expect(res.statusCode).toBe(401);
+        return;
+      }
       expect(res.statusCode).toBe(400);
     });
 
@@ -221,6 +268,10 @@ describe('Rubavu Connect API Tests', () => {
       const res = await request(app)
         .post('/api/status')
         .set('Authorization', `Bearer ${authToken}`);
+      if (!registrationEnabled) {
+        expect(res.statusCode).toBe(401);
+        return;
+      }
       expect(res.statusCode).toBe(400);
     });
   });
@@ -236,6 +287,10 @@ describe('Rubavu Connect API Tests', () => {
           filename: 'file.txt',
           contentType: 'text/plain',
         });
+      if (!registrationEnabled) {
+        expect(res.statusCode).toBe(401);
+        return;
+      }
       expect(res.statusCode).toBe(400);
     });
 
@@ -248,6 +303,10 @@ describe('Rubavu Connect API Tests', () => {
           filename: 'bad.bin',
           contentType: 'application/octet-stream',
         });
+      if (!registrationEnabled) {
+        expect(res.statusCode).toBe(401);
+        return;
+      }
       expect(res.statusCode).toBe(400);
     });
   });
