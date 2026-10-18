@@ -2,6 +2,7 @@ const { query, queryOne } = require('../config/database');
 const { sendSuccess, sendError } = require('../utils/response');
 const cloudinaryService = require('../services/cloudinaryService');
 const { isOnline } = require('../utils/presence');
+const { normalizePhoneNumber } = require('../utils/phoneNumber');
 
 async function getProfile(req, res, next) {
   try {
@@ -29,7 +30,8 @@ async function getProfile(req, res, next) {
     );
     const postCountRows = await query(
       `SELECT COUNT(*) as count FROM posts
-       WHERE (user_id = ? OR EXISTS (
+       WHERE is_hidden = 0
+         AND (user_id = ? OR EXISTS (
          SELECT 1 FROM post_collaborators pc
          WHERE pc.post_id = posts.id AND pc.user_id = ? AND pc.status = 'accepted'
        ))`,
@@ -85,12 +87,34 @@ async function getProfile(req, res, next) {
 
 async function updateProfile(req, res, next) {
   try {
-    const { full_name, bio, interests } = req.body;
+    const { username, email, full_name, bio, interests, phone_number } = req.body;
     const userId = req.user.id;
 
     const updates = [];
     const params = [];
 
+    if (username !== undefined) {
+      const existingUsername = await queryOne(
+        'SELECT id FROM users WHERE username = ? AND id != ?',
+        [username, userId]
+      );
+      if (existingUsername) {
+        return sendError(res, 'This username is already taken', null, 409);
+      }
+      updates.push('username = ?');
+      params.push(username);
+    }
+    if (email !== undefined) {
+      const existingEmail = await queryOne(
+        'SELECT id FROM users WHERE email = ? AND id != ?',
+        [email, userId]
+      );
+      if (existingEmail) {
+        return sendError(res, 'This email is already in use', null, 409);
+      }
+      updates.push('email = ?');
+      params.push(email);
+    }
     if (full_name !== undefined) {
       updates.push('full_name = ?');
       params.push(full_name);
@@ -109,6 +133,20 @@ async function updateProfile(req, res, next) {
       updates.push('interests = ?');
       params.push(interestsValue);
     }
+    if (phone_number !== undefined) {
+      const normalizedPhone = normalizePhoneNumber(phone_number);
+      if (normalizedPhone) {
+        const existingPhone = await queryOne(
+          'SELECT id FROM users WHERE phone_number = ? AND id != ?',
+          [normalizedPhone, userId]
+        );
+        if (existingPhone) {
+          return sendError(res, 'This phone number is already in use', null, 409);
+        }
+      }
+      updates.push('phone_number = ?');
+      params.push(normalizedPhone);
+    }
 
     if (updates.length === 0) {
       return sendError(res, 'No fields to update', null, 400);
@@ -123,7 +161,7 @@ async function updateProfile(req, res, next) {
     );
 
     const user = await queryOne(
-      'SELECT id, username, full_name, email, bio, interests, profile_image_url, is_verified, created_at, updated_at FROM users WHERE id = ?',
+      'SELECT id, username, full_name, email, phone_number, bio, interests, profile_image_url, is_verified, created_at, updated_at FROM users WHERE id = ?',
       [userId]
     );
 

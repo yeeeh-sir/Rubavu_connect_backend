@@ -23,7 +23,7 @@ async function authenticate(req, res, next) {
 
     const decoded = verifyToken(token);
     const user = await queryOne(
-      'SELECT id, username, email, full_name, profile_image_url, bio, interests, is_verified, is_active, created_at FROM users WHERE id = ? AND is_active = 1',
+      'SELECT id, username, email, full_name, profile_image_url, bio, interests, role, is_verified, is_active, created_at FROM users WHERE id = ? AND is_active = 1',
       [decoded.id]
     );
 
@@ -49,6 +49,7 @@ async function authenticate(req, res, next) {
         message: 'Invalid token.',
       });
     }
+    console.error('Authentication middleware failed:', error);
     return res.status(500).json({
       success: false,
       message: 'Authentication error.',
@@ -76,7 +77,7 @@ function optionalAuth(req, res, next) {
   try {
     const decoded = verifyToken(token);
     queryOne(
-      'SELECT id, username, email, full_name, profile_image_url, bio, interests, is_verified, is_active, created_at FROM users WHERE id = ? AND is_active = 1',
+      'SELECT id, username, email, full_name, profile_image_url, bio, interests, role, is_verified, is_active, created_at FROM users WHERE id = ? AND is_active = 1',
       [decoded.id]
     )
       .then((user) => {

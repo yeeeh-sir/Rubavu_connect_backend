@@ -14,7 +14,7 @@ async function createComment(req, res, next) {
         if (!commentText && !file) return sendError(res, 'Comment text or media is required', null, 400);
         if (commentText.length > 1000) return sendError(res, 'Comment must be under 1000 characters', null, 400);
 
-        const post = await queryOne('SELECT id, user_id FROM posts WHERE id = ?', [postId]);
+        const post = await queryOne('SELECT id, user_id FROM posts WHERE id = ? AND is_hidden = 0', [postId]);
         if (!post) return sendError(res, 'Post not found', null, 404);
 
         let mediaUrl = null;
@@ -63,7 +63,7 @@ async function getComments(req, res, next) {
         const page = Number.parseInt(req.query.page, 10) || 1;
         const limit = Math.min(Number.parseInt(req.query.limit, 10) || 20, 50);
         const offset = (page - 1) * limit;
-        const post = await queryOne('SELECT id FROM posts WHERE id = ?', [postId]);
+        const post = await queryOne('SELECT id FROM posts WHERE id = ? AND is_hidden = 0', [postId]);
         if (!post) return sendError(res, 'Post not found', null, 404);
 
         const countRows = await query('SELECT COUNT(*) AS total FROM comments WHERE post_id = ?', [postId]);

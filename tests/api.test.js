@@ -9,6 +9,7 @@ describe('Rubavu Connect API Tests', () => {
     full_name: 'Test User',
     username: 'testuser' + Date.now(),
     email: 'test' + Date.now() + '@example.com',
+    phone_number: '+250 7' + Date.now().toString().slice(-8),
     password: 'password123',
   };
 
@@ -64,6 +65,24 @@ describe('Rubavu Connect API Tests', () => {
       expect(res.body.data.token).toBeDefined();
     });
 
+    test('POST /api/auth/login should accept username', async () => {
+      const res = await request(app)
+        .post('/api/auth/login')
+        .send({ identifier: testUser.username, password: testUser.password });
+      expect(res.statusCode).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.user.username).toBe(testUser.username);
+    });
+
+    test('POST /api/auth/login should accept phone number', async () => {
+      const res = await request(app)
+        .post('/api/auth/login')
+        .send({ identifier: testUser.phone_number, password: testUser.password });
+      expect(res.statusCode).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.user.phone_number).toBe(testUser.phone_number.replace(/\s/g, ''));
+    });
+
     test('POST /api/auth/login with wrong password should fail', async () => {
       const res = await request(app)
         .post('/api/auth/login')
@@ -91,6 +110,71 @@ describe('Rubavu Connect API Tests', () => {
         .set('Authorization', `Bearer ${authToken}`);
       expect(res.body.data.user).not.toHaveProperty('password_hash');
       expect(res.body.data.user).not.toHaveProperty('password');
+    });
+
+    test('Account security requires fresh verification and explicit deletion confirmation', async () => {
+      const suffix = Date.now().toString();
+      const account = {
+        full_name: 'Temporary Security Test',
+        username: `security${suffix}`,
+        email: `security${suffix}@example.com`,
+        password: 'initial-password123',
+      };
+      const registration = await request(app).post('/api/auth/register').send(account);
+      expect(registration.statusCode).toBe(201);
+      const token = registration.body.data.token;
+      const authorization = `Bearer ${token}`;
+
+      const rejectedProof = await request(app)
+        .post('/api/auth/verify-account')
+        .set('Authorization', authorization)
+        .send({ current_password: 'not-the-password' });
+      expect(rejectedProof.statusCode).toBe(401);
+
+      const verification = await request(app)
+        .post('/api/auth/verify-account')
+        .set('Authorization', authorization)
+        .send({ current_password: account.password });
+      expect(verification.statusCode).toBe(200);
+      const verificationToken = verification.body.data.verification_token;
+      expect(verificationToken).toBeDefined();
+
+      const passwordChange = await request(app)
+        .post('/api/auth/change-password')
+        .set('Authorization', authorization)
+        .send({ current_password: account.password, new_password: 'updated-password123' });
+      expect(passwordChange.statusCode).toBe(200);
+
+      const invalidToken = await request(app)
+        .post('/api/auth/delete-account')
+        .set('Authorization', authorization)
+        .send({
+          verification_token: 'invalid',
+          username: account.username,
+          confirmation: 'DELETE MY ACCOUNT',
+        });
+      expect(invalidToken.statusCode).toBe(401);
+
+      const invalidConfirmation = await request(app)
+        .post('/api/auth/delete-account')
+        .set('Authorization', authorization)
+        .send({
+          verification_token: verificationToken,
+          username: account.username,
+          confirmation: 'DELETE',
+        });
+      expect(invalidConfirmation.statusCode).toBe(400);
+
+      const deletion = await request(app)
+        .post('/api/auth/delete-account')
+        .set('Authorization', authorization)
+        .send({
+          verification_token: verificationToken,
+          username: account.username,
+          confirmation: 'DELETE MY ACCOUNT',
+        });
+      expect(deletion.statusCode).toBe(200);
+      expect(deletion.body.message).toBe('Account permanently deleted');
     });
   });
 

@@ -186,7 +186,7 @@ async function getPosts(req, res, next) {
     const offset = (page - 1) * limit;
     const userId = req.user ? req.user.id : null;
 
-    const countRows = await query('SELECT COUNT(*) as total FROM posts', []);
+    const countRows = await query('SELECT COUNT(*) as total FROM posts WHERE is_hidden = 0', []);
     const total = countRows[0]?.total || 0;
 
     const posts = await query(
@@ -197,7 +197,8 @@ async function getPosts(req, res, next) {
         ${userId ? ', (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id AND user_id = ?) as is_liked' : ', 0 as is_liked'}
        FROM posts p
        JOIN users u ON p.user_id = u.id AND u.is_active = 1
-        WHERE p.audience = 'public'
+        WHERE p.is_hidden = 0
+          AND (p.audience = 'public'
           OR p.user_id = ?
           OR (p.audience = 'friends' AND EXISTS (
             SELECT 1 FROM connections c
@@ -205,7 +206,7 @@ async function getPosts(req, res, next) {
               AND ((c.requester_id = p.user_id AND c.addressee_id = ?)
                 OR (c.requester_id = ? AND c.addressee_id = p.user_id))
           ))
-          OR EXISTS (SELECT 1 FROM post_collaborators pc WHERE pc.post_id = p.id AND pc.user_id = ? AND pc.status = 'accepted')
+          OR EXISTS (SELECT 1 FROM post_collaborators pc WHERE pc.post_id = p.id AND pc.user_id = ? AND pc.status = 'accepted'))
         ORDER BY p.created_at DESC
        LIMIT ? OFFSET ?`,
       userId
@@ -279,7 +280,7 @@ async function getPostById(req, res, next) {
         ${userId ? ', (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id AND user_id = ?) as is_liked' : ', 0 as is_liked'}
        FROM posts p
        JOIN users u ON p.user_id = u.id
-       WHERE p.id = ? AND (
+       WHERE p.id = ? AND p.is_hidden = 0 AND (
          p.audience = 'public'
          OR p.user_id = ?
          OR (p.audience = 'friends' AND EXISTS (SELECT 1 FROM connections c WHERE c.status = 'accepted' AND ((c.requester_id = p.user_id AND c.addressee_id = ?) OR (c.requester_id = ? AND c.addressee_id = p.user_id))))
@@ -314,7 +315,8 @@ async function getUserPosts(req, res, next) {
 
     const countRows = await query(
       `SELECT COUNT(*) as total FROM posts
-       WHERE (user_id = ? OR EXISTS (SELECT 1 FROM post_collaborators pc WHERE pc.post_id = posts.id AND pc.user_id = ? AND pc.status = 'accepted'))
+       WHERE is_hidden = 0
+         AND (user_id = ? OR EXISTS (SELECT 1 FROM post_collaborators pc WHERE pc.post_id = posts.id AND pc.user_id = ? AND pc.status = 'accepted'))
          AND (audience = 'public' OR user_id = ?)`,
       [user.id, user.id, user.id]
     );
@@ -329,6 +331,7 @@ async function getUserPosts(req, res, next) {
        FROM posts p
        JOIN users u ON p.user_id = u.id
        WHERE (p.user_id = ? OR EXISTS (SELECT 1 FROM post_collaborators pc WHERE pc.post_id = p.id AND pc.user_id = ? AND pc.status = 'accepted'))
+         AND p.is_hidden = 0
          AND p.audience = 'public'
        ORDER BY p.created_at DESC
        LIMIT ? OFFSET ?`,

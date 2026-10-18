@@ -1,4 +1,5 @@
 const { body, query, param, validationResult } = require('express-validator');
+const { isValidPhoneNumber } = require('./phoneNumber');
 
 function handleValidation(req, res, next) {
   const errors = validationResult(req);
@@ -21,6 +22,11 @@ const registerValidation = [
     .matches(/^[a-zA-Z0-9_.]+$/)
     .withMessage('Username can only contain letters, numbers, dots and underscores'),
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+  body('phone_number')
+    .optional({ checkFalsy: true })
+    .trim()
+    .custom(isValidPhoneNumber)
+    .withMessage('Enter a valid phone number with 7 to 15 digits'),
   body('password')
     .isLength({ min: 8 })
     .withMessage('Password must be at least 8 characters'),
@@ -28,13 +34,84 @@ const registerValidation = [
 ];
 
 const loginValidation = [
-  body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+  body('identifier')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 254 })
+    .withMessage('Enter a valid email, username, or phone number'),
+  body('email')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 254 })
+    .withMessage('Enter a valid email, username, or phone number'),
+  body().custom((_, { req }) => {
+    const identifier = req.body.identifier ?? req.body.email;
+    return typeof identifier === 'string' && identifier.trim().length > 0;
+  }).withMessage('Email, username, or phone number is required'),
   body('password').notEmpty().withMessage('Password is required'),
   handleValidation,
 ];
 
+const accountVerificationValidation = (confirmationRequired) => [
+  body('current_password')
+    .optional()
+    .isString()
+    .withMessage('Current password must be text'),
+  body('google_credential')
+    .optional()
+    .isString()
+    .withMessage('Google credential must be text'),
+  body().custom((_, { req }) => (
+    (typeof req.body.current_password === 'string' && req.body.current_password.length > 0) ||
+    (typeof req.body.google_credential === 'string' && req.body.google_credential.length > 0)
+  )).withMessage('Verify your account with your password or Google'),
+  ...(confirmationRequired ? [
+    body('username')
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('Username confirmation is required'),
+    body('confirmation')
+      .equals('DELETE MY ACCOUNT')
+      .withMessage('Type DELETE MY ACCOUNT to confirm deletion'),
+  ] : []),
+];
+
+const changePasswordValidation = [
+  ...accountVerificationValidation(false),
+  body('new_password')
+    .isString()
+    .isLength({ min: 8 })
+    .withMessage('New password must be at least 8 characters'),
+  handleValidation,
+];
+
+const verifyAccountValidation = [
+  ...accountVerificationValidation(false),
+  handleValidation,
+];
+
+const deleteAccountValidation = [
+  body('verification_token')
+    .isString()
+    .notEmpty()
+    .withMessage('Verify your account before requesting deletion'),
+  body('username')
+    .isString()
+    .trim()
+    .notEmpty()
+    .withMessage('Username confirmation is required'),
+  body('confirmation')
+    .equals('DELETE MY ACCOUNT')
+    .withMessage('Type DELETE MY ACCOUNT to confirm deletion'),
+  handleValidation,
+];
+
 const googleAuthValidation = [
-  body('credential').notEmpty().withMessage('Google credential is required'),
+  body('credential')
+    .isString()
+    .notEmpty()
+    .withMessage('Google credential is required'),
   handleValidation,
 ];
 
@@ -44,11 +121,28 @@ const profileUpdateValidation = [
     .trim()
     .notEmpty()
     .withMessage('Full name cannot be empty'),
+  body('username')
+    .optional()
+    .trim()
+    .isLength({ min: 3, max: 50 })
+    .withMessage('Username must be 3-50 characters')
+    .matches(/^[a-zA-Z0-9_.]+$/)
+    .withMessage('Username can only contain letters, numbers, dots and underscores'),
+  body('email')
+    .optional()
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Enter a valid email address'),
   body('bio')
     .optional()
     .trim()
     .isLength({ max: 500 })
     .withMessage('Bio must be under 500 characters'),
+  body('phone_number')
+    .optional({ nullable: true, checkFalsy: true })
+    .trim()
+    .custom(isValidPhoneNumber)
+    .withMessage('Enter a valid phone number with 7 to 15 digits'),
   handleValidation,
 ];
 
@@ -109,6 +203,9 @@ module.exports = {
   handleValidation,
   registerValidation,
   loginValidation,
+  changePasswordValidation,
+  verifyAccountValidation,
+  deleteAccountValidation,
   googleAuthValidation,
   profileUpdateValidation,
   postValidation,

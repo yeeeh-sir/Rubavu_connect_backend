@@ -7,7 +7,6 @@ const morgan = require('morgan');
 const cookieParser = require('cookie-parser');
 const { checkConnection } = require('./config/database');
 const { startCleanupService } = require('./services/cleanupService');
-const { generalLimiter } = require('./middleware/rateLimiter');
 const errorHandler = require('./middleware/errorHandler');
 const { runMigration } = require('./database/migrations/001_create_notifications');
 const { runMigration: runConnectionsMigration } = require('./database/migrations/002_create_connections');
@@ -16,6 +15,11 @@ const { runMigration: runLiveMigration } = require('./database/migrations/004_cr
 const { runMigration: runPostAudienceMigration } = require('./database/migrations/005_add_post_audience_collaborators');
 const { runMigration: runPlatformMigration } = require('./database/migrations/006_create_platform_features');
 const { runMigration: runPresenceMigration } = require('./database/migrations/007_add_presence');
+const { runMigration: runPhoneNumberMigration } = require('./database/migrations/008_add_phone_number');
+const { runMigration: runRbacMigration } = require('./database/migrations/009_add_rbac_and_audit');
+const { runMigration: runModerationMigration } = require('./database/migrations/010_moderation_fields');
+const { runMigration: runMessageReportsMigration } = require('./database/migrations/011_message_reports');
+const { maintenanceGuard } = require('./middleware/maintenance');
 const { attachSocketServer } = require('./services/socketService');
 
 const app = express();
@@ -32,7 +36,7 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use(generalLimiter);
+app.use(maintenanceGuard);
 
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
@@ -49,6 +53,10 @@ app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/live', require('./routes/liveRoutes'));
 app.use('/api/reports', require('./routes/reportRoutes'));
 app.use('/api/privacy', require('./routes/privacyRoutes'));
+app.use('/api/admin', require('./routes/adminRoutes'));
+
+const adminSettingsController = require('./controllers/adminSettingsController');
+app.get('/api/settings', adminSettingsController.getPublicSettings);
 
 app.get('/api/health', (req, res) => {
   res.json({
@@ -98,6 +106,10 @@ async function startServer() {
     await runPostAudienceMigration();
     await runPlatformMigration();
     await runPresenceMigration();
+    await runPhoneNumberMigration();
+    await runRbacMigration();
+    await runModerationMigration();
+    await runMessageReportsMigration();
     startCleanupService();
 
     const { server } = attachSocketServer(app);

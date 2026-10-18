@@ -15,4 +15,20 @@ function verifyToken(token) {
   return jwt.verify(token, JWT_SECRET);
 }
 
-module.exports = { generateToken, verifyToken };
+function generateActionToken(userId, action) {
+  return jwt.sign(
+    { id: userId, purpose: action },
+    JWT_SECRET,
+    { expiresIn: '5m' }
+  );
+}
+
+function verifyActionToken(token, action) {
+  const decoded = jwt.verify(token, JWT_SECRET);
+  if (decoded.purpose !== action || !decoded.id) {
+    throw new jwt.JsonWebTokenError('Invalid verification token');
+  }
+  return decoded;
+}
+
+module.exports = { generateToken, verifyToken, generateActionToken, verifyActionToken };
