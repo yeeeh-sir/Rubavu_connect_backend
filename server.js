@@ -8,6 +8,7 @@ const cookieParser = require('cookie-parser');
 const { checkConnection } = require('./config/database');
 const { startCleanupService } = require('./services/cleanupService');
 const errorHandler = require('./middleware/errorHandler');
+const { runMigration: runUsersMigration } = require('./database/migrations/000_create_users');
 const { runMigration } = require('./database/migrations/001_create_notifications');
 const { runMigration: runConnectionsMigration } = require('./database/migrations/002_create_connections');
 const { runMigration: runSafetyMigration } = require('./database/migrations/003_create_safety');
@@ -99,6 +100,7 @@ async function startServer() {
       process.exit(1);
     }
 
+    await runUsersMigration();
     await runMigration();
     await runConnectionsMigration();
     await runSafetyMigration();
