@@ -1,5 +1,56 @@
 const { pool } = require('../../config/database');
 
+async function inspectPostsSchema(connection) {
+  const [rows] = await connection.execute(`
+    SELECT DATABASE() AS DATABASE_NAME,
+           t.TABLE_NAME, t.ENGINE,
+           c.COLUMN_NAME, c.COLUMN_TYPE, c.IS_NULLABLE, c.COLUMN_KEY, c.EXTRA,
+           (SELECT COUNT(*)
+            FROM information_schema.KEY_COLUMN_USAGE pk
+            WHERE pk.TABLE_SCHEMA = DATABASE()
+              AND pk.TABLE_NAME = 'posts'
+              AND pk.CONSTRAINT_NAME = 'PRIMARY') AS PRIMARY_KEY_COLUMN_COUNT,
+           (SELECT GROUP_CONCAT(pk.COLUMN_NAME ORDER BY pk.ORDINAL_POSITION)
+            FROM information_schema.KEY_COLUMN_USAGE pk
+            WHERE pk.TABLE_SCHEMA = DATABASE()
+              AND pk.TABLE_NAME = 'posts'
+              AND pk.CONSTRAINT_NAME = 'PRIMARY') AS PRIMARY_KEY_COLUMNS,
+           (SELECT COUNT(*)
+            FROM information_schema.TABLES other_tables
+            WHERE other_tables.TABLE_NAME = 'posts'
+              AND other_tables.TABLE_SCHEMA <> COALESCE(DATABASE(), '')) AS POSTS_IN_OTHER_SCHEMAS
+    FROM (SELECT 1) AS current_database
+    LEFT JOIN information_schema.TABLES t
+      ON t.TABLE_SCHEMA = DATABASE()
+      AND t.TABLE_NAME = 'posts'
+    LEFT JOIN information_schema.COLUMNS c
+      ON c.TABLE_SCHEMA = t.TABLE_SCHEMA
+      AND c.TABLE_NAME = t.TABLE_NAME
+    ORDER BY c.ORDINAL_POSITION
+  `);
+  const firstRow = rows[0] || {};
+
+  return {
+    database: firstRow.DATABASE_NAME || null,
+    postsExists: Boolean(firstRow.TABLE_NAME),
+    postsExistsInOtherSchema: Number(firstRow.POSTS_IN_OTHER_SCHEMAS) > 0,
+    engine: firstRow.ENGINE || null,
+    primaryKeyColumnCount: Number(firstRow.PRIMARY_KEY_COLUMN_COUNT) || 0,
+    primaryKeyColumns: firstRow.PRIMARY_KEY_COLUMNS
+      ? firstRow.PRIMARY_KEY_COLUMNS.split(',')
+      : [],
+    columns: rows
+      .filter((row) => row.COLUMN_NAME)
+      .map(({ COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_KEY, EXTRA }) => ({
+        name: COLUMN_NAME,
+        type: COLUMN_TYPE,
+        nullable: IS_NULLABLE,
+        key: COLUMN_KEY,
+        extra: EXTRA,
+      })),
+  };
+}
+
 async function runMigration() {
   const connection = await pool.getConnection();
   try {
@@ -36,6 +87,10 @@ async function runMigration() {
         Number(parent.PRIMARY_KEY_COLUMN_COUNT) !== 1 ||
         Number(parent.ID_IS_PRIMARY_KEY) !== 1
       ) {
+        if (tableName === 'posts') {
+          const diagnostics = await inspectPostsSchema(connection);
+          console.error('Read-only posts schema diagnostics:', JSON.stringify(diagnostics));
+        }
         throw new Error(
           `Cannot create comments table: ${tableName}.id must be a single-column InnoDB integer primary key; ` +
           `found ${parent ? `${parent.ENGINE} ${parent.COLUMN_TYPE}` : 'no table or id column'}`
