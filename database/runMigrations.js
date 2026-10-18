@@ -1,5 +1,6 @@
 const migrations = [
   ['users', require('./migrations/000_create_users').runMigration],
+  ['posts', require('./migrations/003_create_posts_table').runMigration],
   ['notifications', require('./migrations/001_create_notifications').runMigration],
   ['connections', require('./migrations/002_create_connections').runMigration],
   ['safety', require('./migrations/003_create_safety').runMigration],

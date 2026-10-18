@@ -23,6 +23,7 @@ describe('comments table migration', () => {
   test('preserves every migration in order and places comments before comment media', () => {
     expect(migrationNames).toEqual([
       'users',
+      'posts',
       'notifications',
       'connections',
       'safety',
