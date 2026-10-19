@@ -3,8 +3,20 @@ const { sendSuccess, sendError } = require('../utils/response');
 const { OAuth2Client } = require('google-auth-library');
 const { generateActionToken, verifyActionToken } = require('../utils/jwt');
 
-const googleClientId = process.env.GOOGLE_CLIENT_ID;
-const googleClient = googleClientId ? new OAuth2Client(googleClientId) : null;
+const googleClientId = (process.env.GOOGLE_CLIENT_ID || '').trim();
+const googleClientConfigured = /^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$/.test(googleClientId);
+const googleClient = googleClientConfigured ? new OAuth2Client(googleClientId) : null;
+
+function classifyGoogleVerificationError(error) {
+  const message = typeof error?.message === 'string' ? error.message.toLowerCase() : '';
+  if (/network|fetch|econn|timeout|timed out/.test(message)) return 'verifier_unavailable';
+  if (/audience|recipient/.test(message)) return 'audience_mismatch';
+  if (/expired|used too late|used too early/.test(message)) return 'token_expired_or_not_yet_valid';
+  if (/malformed|segments|jwt/.test(message)) return 'malformed_token';
+  if (/issuer/.test(message)) return 'issuer_mismatch';
+  if (/signature|public key|pem|certificate/.test(message)) return 'signature_verification_failed';
+  return 'verification_failed';
+}
 
 async function verifyGoogleIdToken(idToken) {
   if (!googleClient) {
@@ -26,6 +38,13 @@ async function verifyGoogleIdToken(idToken) {
     });
     payload = ticket.getPayload();
   } catch (error) {
+    const failureCategory = classifyGoogleVerificationError(error);
+    console.error('Google ID token verification failed:', failureCategory);
+    if (failureCategory === 'verifier_unavailable') {
+      const unavailable = new Error('Google account verification is temporarily unavailable');
+      unavailable.statusCode = 503;
+      throw unavailable;
+    }
     const invalidCredential = new Error('Google account verification failed');
     invalidCredential.statusCode = 401;
     throw invalidCredential;
@@ -94,7 +113,10 @@ async function googleLogin(req, res, next) {
       payload = await verifyGoogleIdToken(req.body.credential);
     } catch (error) {
       if (error.statusCode === 503) {
-        return sendError(res, 'Google login is not configured on the server', null, 503);
+        const message = googleClient
+          ? 'Google account verification is temporarily unavailable'
+          : 'Google login is not configured on the server';
+        return sendError(res, message, null, 503);
       }
       return sendError(res, 'Invalid Google token', null, 401);
     }

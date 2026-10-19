@@ -76,6 +76,58 @@ describe('Google ID token authentication', () => {
     expect(mockGoogleAuth).not.toHaveBeenCalled();
   });
 
+  test.each([
+    ['wrong audience', new Error('Wrong recipient, payload audience != required'), 'audience_mismatch'],
+    ['expired token', new Error('Token used too late, expired'), 'token_expired_or_not_yet_valid'],
+    ['malformed token', new Error('Wrong number of segments in token'), 'malformed_token'],
+  ])('logs a safe category for %s without logging the token', async (_caseName, verificationError, category) => {
+    const token = 'synthetic-google-token-never-log';
+    mockVerifyIdToken.mockRejectedValue(verificationError);
+    const verificationLog = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      const response = await request(app)
+        .post('/api/auth/google')
+        .send({ credential: token });
+
+      expect(response.status).toBe(401);
+      expect(response.body.message).toBe('Invalid Google token');
+      expect(mockVerifyIdToken).toHaveBeenCalledWith({
+        idToken: token,
+        audience: expectedClientId,
+      });
+      expect(verificationLog).toHaveBeenCalledWith(
+        'Google ID token verification failed:',
+        category
+      );
+      expect(JSON.stringify(verificationLog.mock.calls)).not.toContain(token);
+      expect(mockGoogleAuth).not.toHaveBeenCalled();
+    } finally {
+      verificationLog.mockRestore();
+    }
+  });
+
+  test('reports verifier network failures as temporary service errors', async () => {
+    mockVerifyIdToken.mockRejectedValue(new Error('request timed out fetching certificates'));
+    const verificationLog = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    try {
+      const response = await request(app)
+        .post('/api/auth/google')
+        .send({ credential: 'synthetic-google-token' });
+
+      expect(response.status).toBe(503);
+      expect(response.body.message).toBe('Google account verification is temporarily unavailable');
+      expect(verificationLog).toHaveBeenCalledWith(
+        'Google ID token verification failed:',
+        'verifier_unavailable'
+      );
+      expect(mockGoogleAuth).not.toHaveBeenCalled();
+    } finally {
+      verificationLog.mockRestore();
+    }
+  });
+
   test('rejects non-string credentials', async () => {
     const response = await request(app)
       .post('/api/auth/google')
@@ -84,5 +136,30 @@ describe('Google ID token authentication', () => {
     expect(response.status).toBe(400);
     expect(mockVerifyIdToken).not.toHaveBeenCalled();
     expect(mockGoogleAuth).not.toHaveBeenCalled();
+  });
+
+  test('reports invalid server client configuration without revealing its value', async () => {
+    const previousClientId = process.env.GOOGLE_CLIENT_ID;
+    process.env.GOOGLE_CLIENT_ID = 'invalid-google-client-id';
+
+    try {
+      jest.resetModules();
+      const { googleLogin } = require('../controllers/authController');
+      const unconfiguredApp = express();
+      unconfiguredApp.use(express.json());
+      unconfiguredApp.post('/api/auth/google', googleLogin);
+
+      const response = await request(unconfiguredApp)
+        .post('/api/auth/google')
+        .send({ credential: 'fake-id-token' });
+
+      expect(response.status).toBe(503);
+      expect(response.body.message).toBe('Google login is not configured on the server');
+      expect(JSON.stringify(response.body)).not.toContain('invalid-google-client-id');
+      expect(mockGoogleAuth).not.toHaveBeenCalled();
+    } finally {
+      process.env.GOOGLE_CLIENT_ID = previousClientId;
+      jest.resetModules();
+    }
   });
 });
