@@ -1,4 +1,5 @@
 const { pool } = require('../../config/database');
+const { addColumnsIfMissing } = require('./helpers');
 
 async function runMigration() {
   const connection = await pool.getConnection();
@@ -62,34 +63,30 @@ async function runMigration() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
-    await connection.query(`
-      ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS interests VARCHAR(500) NULL,
-        ADD COLUMN IF NOT EXISTS who_can_message ENUM('everyone', 'connections') NOT NULL DEFAULT 'everyone',
-        ADD COLUMN IF NOT EXISTS who_can_connect ENUM('everyone', 'connections') NOT NULL DEFAULT 'everyone',
-        ADD COLUMN IF NOT EXISTS show_online TINYINT(1) NOT NULL DEFAULT 1
-    `);
+    await addColumnsIfMissing(connection, 'users', {
+      interests: 'VARCHAR(500) NULL',
+      who_can_message: "ENUM('everyone', 'connections') NOT NULL DEFAULT 'everyone'",
+      who_can_connect: "ENUM('everyone', 'connections') NOT NULL DEFAULT 'everyone'",
+      show_online: 'TINYINT(1) NOT NULL DEFAULT 1',
+    });
 
-    await connection.query(`
-      ALTER TABLE post_collaborators
-        ADD COLUMN IF NOT EXISTS status ENUM('pending', 'accepted') NOT NULL DEFAULT 'accepted'
-    `);
+    await addColumnsIfMissing(connection, 'post_collaborators', {
+      status: "ENUM('pending', 'accepted') NOT NULL DEFAULT 'accepted'",
+    });
 
     await connection.query(`
       ALTER TABLE notifications
         MODIFY COLUMN type ENUM('follow', 'like', 'comment', 'message', 'connection_request', 'connection_accepted', 'collaboration_invite', 'collaboration_accepted', 'live', 'report') NOT NULL
     `);
 
-    await connection.query(`
-      ALTER TABLE live_sessions
-        ADD COLUMN IF NOT EXISTS created_by BIGINT UNSIGNED NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS viewer_visibility ENUM('public', 'connections') NOT NULL DEFAULT 'public'
-    `);
+    await addColumnsIfMissing(connection, 'live_sessions', {
+      created_by: 'BIGINT UNSIGNED NOT NULL DEFAULT 0',
+      viewer_visibility: "ENUM('public', 'connections') NOT NULL DEFAULT 'public'",
+    });
 
-    await connection.query(`
-      ALTER TABLE statuses
-        ADD COLUMN IF NOT EXISTS upload_id VARCHAR(100) NULL
-    `);
+    await addColumnsIfMissing(connection, 'statuses', {
+      upload_id: 'VARCHAR(100) NULL',
+    });
 
     console.log('Platform features migration complete');
   } catch (error) {

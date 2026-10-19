@@ -1,15 +1,15 @@
 const { pool } = require('../../config/database');
+const { addColumnsIfMissing } = require('./helpers');
 
 const REPORT_TABLES = ['post_reports', 'comment_reports', 'user_reports', 'live_reports'];
 
 async function ensureReportColumns(connection, table) {
-  await connection.query(`
-    ALTER TABLE ${table}
-      ADD COLUMN IF NOT EXISTS assigned_to BIGINT UNSIGNED NULL,
-      ADD COLUMN IF NOT EXISTS reviewed_by BIGINT UNSIGNED NULL,
-      ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP NULL DEFAULT NULL,
-      ADD COLUMN IF NOT EXISTS resolution_note VARCHAR(500) NULL
-  `);
+  await addColumnsIfMissing(connection, table, {
+    assigned_to: 'BIGINT UNSIGNED NULL',
+    reviewed_by: 'BIGINT UNSIGNED NULL',
+    reviewed_at: 'TIMESTAMP NULL DEFAULT NULL',
+    resolution_note: 'VARCHAR(500) NULL',
+  });
 
   const [statusRows] = await connection.query(
     `SELECT COLUMN_TYPE AS ct FROM information_schema.COLUMNS
@@ -30,13 +30,12 @@ async function runMigration() {
       await ensureReportColumns(connection, table);
     }
 
-    await connection.query(`
-      ALTER TABLE posts
-        ADD COLUMN IF NOT EXISTS is_hidden TINYINT(1) NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS hidden_reason VARCHAR(500) NULL,
-        ADD COLUMN IF NOT EXISTS hidden_by BIGINT UNSIGNED NULL,
-        ADD COLUMN IF NOT EXISTS hidden_at TIMESTAMP NULL DEFAULT NULL
-    `);
+    await addColumnsIfMissing(connection, 'posts', {
+      is_hidden: 'TINYINT(1) NOT NULL DEFAULT 0',
+      hidden_reason: 'VARCHAR(500) NULL',
+      hidden_by: 'BIGINT UNSIGNED NULL',
+      hidden_at: 'TIMESTAMP NULL DEFAULT NULL',
+    });
 
     const [noteTables] = await connection.query(
       "SHOW TABLES LIKE 'report_notes'"

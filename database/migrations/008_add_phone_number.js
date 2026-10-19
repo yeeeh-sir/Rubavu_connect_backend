@@ -1,12 +1,12 @@
 const { pool } = require('../../config/database');
+const { addColumnsIfMissing } = require('./helpers');
 
 async function runMigration() {
   const connection = await pool.getConnection();
   try {
-    await connection.query(`
-      ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS phone_number VARCHAR(32) NULL
-    `);
+    await addColumnsIfMissing(connection, 'users', {
+      phone_number: 'VARCHAR(32) NULL',
+    });
 
     const [indexes] = await connection.query(
       'SHOW INDEX FROM users WHERE Key_name = ?',

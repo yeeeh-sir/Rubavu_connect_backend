@@ -1,12 +1,12 @@
 const { pool } = require('../../config/database');
+const { addColumnsIfMissing } = require('./helpers');
 
 async function runMigration() {
   const connection = await pool.getConnection();
   try {
-    await connection.query(`
-      ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS last_active_at DATETIME NULL AFTER show_online
-    `);
+    await addColumnsIfMissing(connection, 'users', {
+      last_active_at: 'DATETIME NULL AFTER show_online',
+    });
 
     console.log('Presence migration complete');
   } catch (error) {
