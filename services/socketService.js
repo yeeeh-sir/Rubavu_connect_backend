@@ -2,15 +2,12 @@ const http = require('http');
 const { Server } = require('socket.io');
 const { verifyToken } = require('../utils/jwt');
 const { queryOne, execute } = require('../config/database');
+const { buildSocketCorsOptions } = require('../utils/corsOrigins');
 
 function attachSocketServer(app) {
   const server = http.createServer(app);
   const io = new Server(server, {
-    cors: {
-      origin: process.env.CLIENT_URL || 'http://localhost:5173',
-      credentials: true,
-      methods: ['GET', 'POST'],
-    },
+    cors: buildSocketCorsOptions(),
   });
 
   const connectedUsers = new Map();
