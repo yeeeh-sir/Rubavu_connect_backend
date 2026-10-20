@@ -5,6 +5,7 @@ const safeProductionMessages = new Set([
 
 function redactSensitiveDetails(message) {
   return String(message)
+    .replace(/\bBearer\s+[^\s,;]+/gi, '[redacted]')
     .replace(
       /\b(password|passwd|token|secret|authorization|credential|api[_-]?key)\b(\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/gi,
       '$1$2[REDACTED]'
